@@ -210,6 +210,7 @@ project.lock.json
 *.feature.cs
 *.feature.xlsx.*
 *.Specs_*.html
-Solution1/temp_lincolnshire.txt
 
+Solution1/temp_lincolnshire.txt
 Solution1/temp_lincolnshire_short.txt
+
