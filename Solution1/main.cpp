@@ -16,13 +16,13 @@ int main(int argc, char** argv) {
 
 	ifstream myfile("temp_lincolnshire_short.txt");
 
-	string temp;
+	string line;
 	char* token;
 
-	while (getline(myfile, temp))
+	while (getline(myfile, line))
 	{
 		//cout << temp << endl;
-		lines.push_back(temp);
+		lines.push_back(line);
 		
 	}
 
