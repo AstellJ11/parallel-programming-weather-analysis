@@ -30,3 +30,9 @@
 *.exe
 *.out
 *.app
+
+Solution1/x64/Debug/
+
+Solution1/temp_lincolnshire_short.txt
+
+Solution1/temp_lincolnshire.txt
