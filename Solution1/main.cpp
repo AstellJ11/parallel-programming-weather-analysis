@@ -2,6 +2,7 @@
 #include <vector>
 #include <algorithm>
 #include <numeric>
+#include <chrono>
 
 #include "Utils.h"
 
@@ -17,12 +18,12 @@
 //
 
 void print_help() {
-	std::cerr << "Application usage:" << std::endl;
+	cout << "Application usage:" << endl;
 
-	std::cerr << "  -p : select platform " << std::endl;
-	std::cerr << "  -d : select device" << std::endl;
-	std::cerr << "  -l : list all platforms and devices" << std::endl;
-	std::cerr << "  -h : print this message" << std::endl;
+	cout << "  -p : select platform " << endl;
+	cout << "  -d : select device" << endl;
+	cout << "  -l : list all platforms and devices" << endl;
+	cout << "  -h : print this message" << endl;
 }
 
 int main(int argc, char** argv) {
@@ -33,7 +34,7 @@ int main(int argc, char** argv) {
 	for (int i = 1; i < argc; i++) {
 		if ((strcmp(argv[i], "-p") == 0) && (i < (argc - 1))) { platform_id = atoi(argv[++i]); }
 		else if ((strcmp(argv[i], "-d") == 0) && (i < (argc - 1))) { device_id = atoi(argv[++i]); }
-		else if (strcmp(argv[i], "-l") == 0) { std::cout << ListPlatformsDevices() << std::endl; }
+		else if (strcmp(argv[i], "-l") == 0) { cout << ListPlatformsDevices() << endl; }
 		else if (strcmp(argv[i], "-h") == 0) { print_help(); return 0; }
 	}
 
@@ -56,6 +57,14 @@ int main(int argc, char** argv) {
 		AddSources(sources, "kernels/my_kernels.cl");
 
 		cl::Program program(context, sources);
+
+		// Init serial execution time tracker
+		using std::chrono::high_resolution_clock;
+		using std::chrono::duration_cast;
+		using std::chrono::duration;
+		using std::chrono::nanoseconds;
+		using std::chrono::milliseconds;
+		using std::chrono::seconds;
 
 		// Build and debug the kernel code
 		try {
@@ -81,16 +90,13 @@ int main(int argc, char** argv) {
 
 		typedef int mytype;
 
-		// Declare all vector stores
-		//vector<string> place = {};
-		//vector<int> year = {};
-		//vector<int> month = {};
-		//vector<int> day = {};
-		//vector<int> time = {};
+		// Declare vector store
 		vector<mytype> temperature = {};
 
 
 		// ----------------------------- FILE IMPORTING ----------------------------- //
+
+		auto fi_t1 = high_resolution_clock::now(); // Start execution timer
 
 		// Input stream class for import file
 		ifstream myfile("temp_lincolnshire_short.txt");
@@ -116,8 +122,18 @@ int main(int argc, char** argv) {
 			cout << "Error importing the data!" << endl;
 		}
 
+		auto fi_t2 = high_resolution_clock::now();  // Stop execution timer
+
+		// Calculate + display execution time
+		auto fi_ms_int = duration_cast<nanoseconds>(fi_t2 - fi_t1);  // INT
+		duration<double, nano> fi_ms_double = fi_t2 - fi_t1;  // DOUBLE
+		cout << "File importing execution time [ns / s]: " << fi_ms_int.count() << " / " << (fi_ms_double.count() / 1000000000) << endl;
+		cout << " " << endl;
+
 
 		// ----------------------------- SERIAL CODE ----------------------------- //
+
+		auto s_t1 = high_resolution_clock::now(); // Start execution timer
 
 		// Find the max element 
 		int max_temp = *max_element(temperature.begin(), temperature.end());
@@ -143,8 +159,16 @@ int main(int argc, char** argv) {
 		var /= numPoints;
 		float sd = sqrt(var);
 
-		cout << "Serial Outputs:";
-		cout << "\nMax = " << max_temp << " Min = " << min_temp << " Mean = " << average << " SD = " << sd << endl;
+		cout << "Serial Outputs:" << endl;
+		cout << "Max = " << max_temp << " Min = " << min_temp << " Mean = " << average << " SD = " << sd << endl;
+		cout << " " << endl;
+
+		auto s_t2 = high_resolution_clock::now();  // Stop execution timer
+
+		// Calculate + display execution time
+		auto s_ms_int = duration_cast<nanoseconds>(s_t2 - s_t1);  // INT
+		duration<double, nano> s_ms_double = s_t2 - s_t1;  // DOUBLE
+		cout << "Serial code execution time [ns / s]: " << s_ms_int.count() << " / " << (s_ms_double.count() / 1000000000) << endl;
 		cout << " " << endl;
 
 
@@ -152,8 +176,8 @@ int main(int argc, char** argv) {
 
 		// Create events for tracking execution time
 		cl::Event prof_event;
-		cl::Event A_event;
-		cl::Event B_event;
+		cl::Event min_event;
+		cl::Event max_event;
 
 		// Memory allocation
 		// Host - input
@@ -210,10 +234,11 @@ int main(int argc, char** argv) {
 		max_reduce.setArg(2, cl::Local(local_size * sizeof(mytype)));
 
 
-		// Call all kernels in a sequence
-		queue.enqueueNDRangeKernel(min_reduce, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size));
-		queue.enqueueNDRangeKernel(max_reduce, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size));
+		// ----------------------------- Call + Copy kernels ----------------------------- //
 
+		// Call all kernels in a sequence
+		queue.enqueueNDRangeKernel(min_reduce, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size), NULL, &min_event);
+		queue.enqueueNDRangeKernel(max_reduce, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size), NULL, &max_event);
 
 		// Copy the result from device to host
 		queue.enqueueReadBuffer(buffer_min, CL_TRUE, 0, output_size, &min_output[0]);
@@ -223,18 +248,25 @@ int main(int argc, char** argv) {
 		//cout << "A = " << temperature << endl;
 		//cout << "B = " << B << endl;
 
+
+		// ----------------------------- Display results ----------------------------- //
+
 		cout << "Parallel Outputs: " << endl;
 		cout << "Min = " << min_output[0] << endl;
 		cout << "Max = " << max_output[0] << endl;
+		cout << " " << endl;
 
+
+		// ----------------------------- Display profiling info ----------------------------- //
 
 		// Display the kernel + upload/download execution time
-		//cout << "\nKernel execution time for seperate kernels [ns]: " << prof_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - prof_event.getProfilingInfo<CL_PROFILING_COMMAND_START>() << endl;
-		//cout << "\nUpload time for vector A [ns]: " << A_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - A_event.getProfilingInfo<CL_PROFILING_COMMAND_START>() << endl;
-		//cout << "Upload time for vector B [ns]: " << B_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - B_event.getProfilingInfo<CL_PROFILING_COMMAND_START>() << endl;
+		cout << "Kernel execution time for minimum value [ns]: " << min_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - min_event.getProfilingInfo<CL_PROFILING_COMMAND_START>() << endl;
+		cout <<  GetFullProfilingInfo(min_event, ProfilingResolution::PROF_US) << endl;  // Display profiling information
+		cout << " " << endl;
 
-		//// Display profiling information
-		//cout << "\nProfiling information: " << GetFullProfilingInfo(prof_event, ProfilingResolution::PROF_US) << endl;
+		cout << "Kernel execution time for maximum value [ns]: " << max_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - max_event.getProfilingInfo<CL_PROFILING_COMMAND_START>() << endl;
+		cout <<  GetFullProfilingInfo(max_event, ProfilingResolution::PROF_US) << endl;
+		cout << " " << endl;
 
 	}
 	catch (cl::Error err) {
@@ -243,3 +275,23 @@ int main(int argc, char** argv) {
 
 	return 0;
 };
+
+
+// ----------------------------- References ----------------------------- //
+// In class examples used as the basis for sections of code
+// Finding execution time of block of code:
+// https://stackoverflow.com/questions/22387586/measuring-execution-time-of-a-function-in-c
+
+
+/*
+auto fi_ms_int = duration_cast<milliseconds>(fi_t2 - fi_t1);
+auto fi_ms_int2 = duration_cast<seconds>(fi_t2 - fi_t1);
+cout << "File importing execution time [ms]: " << fi_ms_int.count() << endl;  // INT
+cout << "File importing execution time [s]: " << fi_ms_int2.count() << endl;  // INT
+
+duration<double, milli> fi_ms_double = fi_t2 - fi_t1;
+duration<double> fi_ms_double2 = fi_t2 - fi_t1;
+cout << "File importing execution time [ms]: " << fi_ms_double.count() << endl;  // DOUBLE
+cout << "File importing execution time [s]: " << fi_ms_double2.count() << endl;  // DOUBLE
+cout << " " << endl;
+*/
