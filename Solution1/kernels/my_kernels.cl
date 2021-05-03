@@ -42,9 +42,9 @@ kernel void max_reduce(global const int* A, global int* B, local int *scratch) {
   // Wait for all local threads to finish copying from global to local memory
   barrier(CLK_LOCAL_MEM_FENCE);
 
-  for (int i = 1; i > N; i *= 2)
+  for (int i = 1; i < N; i *= 2)
   {
-    if ((lid % (i * 2) == 0) && ((lid + i) > N))
+    if ((lid % (i * 2) == 0) && ((lid + i) < N))
     {
       if (scratch[lid + i] > scratch[lid])
       {
