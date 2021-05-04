@@ -9,7 +9,6 @@
 // -------------------------------------------------------- //
 // CMP3752M - 2021: Parallel Programming - Assessment 01
 // Written by James Astell (17668733)
-// -------------------------------------------------------- //
 
 // ----------------------------- Summary of Implementation ----------------------------- //
 //
@@ -88,15 +87,15 @@ int main(int argc, char** argv) {
 		cout << "Max Work Items Per Workgroup: " << device.getInfo<CL_DEVICE_MAX_WORK_ITEM_SIZES>() << endl;
 		cout << " " << endl;
 
-		typedef int mytype;
-
-		// Declare vector store
-		vector<mytype> temperature = {};
+		typedef int mytype;  // Create additional name for datatype int
 
 
 		// ----------------------------- FILE IMPORTING ----------------------------- //
 
 		auto fi_t1 = high_resolution_clock::now(); // Start execution timer
+
+		// Declare vector store
+		vector<int> temperature = {};
 
 		// Input stream class for import file
 		ifstream myfile("temp_lincolnshire_short.txt");
@@ -114,8 +113,8 @@ int main(int argc, char** argv) {
 					line_vec.push_back(line);
 				}
 
-				int line_int = stoi(line_vec.back()); // Convert string to int
-				temperature.push_back(line_int); // Add final string of each line to back of vector
+				float line_f = stof(line_vec.back()); // Convert string to float
+				temperature.push_back(line_f); // Add final string of each line to back of vector
 			}
 		}
 		else {
@@ -178,6 +177,7 @@ int main(int argc, char** argv) {
 		cl::Event prof_event;
 		cl::Event min_event;
 		cl::Event max_event;
+		cl::Event sum_event;
 
 		// Memory allocation
 		// Host - input
@@ -202,6 +202,7 @@ int main(int argc, char** argv) {
 
 		vector<mytype> min_output(input_elements);
 		vector<mytype> max_output(input_elements);
+		vector<mytype> sum_output(input_elements);
 
 		// Device - buffers
 		cl::Buffer buffer_A(context, CL_MEM_READ_ONLY, input_size);  // Input buffer
@@ -209,6 +210,7 @@ int main(int argc, char** argv) {
 		// Output buffers
 		cl::Buffer buffer_min(context, CL_MEM_READ_WRITE, output_size);
 		cl::Buffer buffer_max(context, CL_MEM_READ_WRITE, output_size);
+		cl::Buffer buffer_sum(context, CL_MEM_READ_WRITE, output_size);
 
 		// Device operations
 		// Copy array A to and initialise other arrays on device memory
@@ -218,6 +220,7 @@ int main(int argc, char** argv) {
 		// Zero other buffers on device memory
 		queue.enqueueFillBuffer(buffer_min, 0, 0, output_size); 
 		queue.enqueueFillBuffer(buffer_max, 0, 0, output_size);
+		queue.enqueueFillBuffer(buffer_sum, 0, 0, output_size);
 
 		// ----------------------------- Execute min kernel ----------------------------- //
 
@@ -233,20 +236,38 @@ int main(int argc, char** argv) {
 		max_reduce.setArg(1, buffer_max);
 		max_reduce.setArg(2, cl::Local(local_size * sizeof(mytype)));
 
+		// ----------------------------- Execute sum kernel ----------------------------- //
+
+		cl::Kernel sum_reduce = cl::Kernel(program, "sum_reduce");
+		sum_reduce.setArg(0, buffer_A);
+		sum_reduce.setArg(1, buffer_sum);
+		sum_reduce.setArg(2, cl::Local(local_size * sizeof(mytype)));
+
 
 		// ----------------------------- Call + Copy kernels ----------------------------- //
 
 		// Call all kernels in a sequence
 		queue.enqueueNDRangeKernel(min_reduce, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size), NULL, &min_event);
 		queue.enqueueNDRangeKernel(max_reduce, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size), NULL, &max_event);
+		queue.enqueueNDRangeKernel(sum_reduce, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size), NULL, &sum_event);
 
 		// Copy the result from device to host
 		queue.enqueueReadBuffer(buffer_min, CL_TRUE, 0, output_size, &min_output[0]);
 		queue.enqueueReadBuffer(buffer_max, CL_TRUE, 0, output_size, &max_output[0]);
+		queue.enqueueReadBuffer(buffer_sum, CL_TRUE, 0, output_size, &sum_output[0]);
 
 		// To check vectors
 		//cout << "A = " << temperature << endl;
 		//cout << "B = " << B << endl;
+
+
+		// ----------------------------- Post parallel calculations ----------------------------- //
+
+		// Mean calculation
+		float f_sum_output = (sum_output[0]);  // To prevent rounding
+		float mean_output = (f_sum_output / input_elements);
+
+		// Standard deviation calculation
 
 
 		// ----------------------------- Display results ----------------------------- //
@@ -254,6 +275,7 @@ int main(int argc, char** argv) {
 		cout << "Parallel Outputs: " << endl;
 		cout << "Min = " << min_output[0] << endl;
 		cout << "Max = " << max_output[0] << endl;
+		cout << "Mean = " << mean_output << endl;
 		cout << " " << endl;
 
 
@@ -279,6 +301,8 @@ int main(int argc, char** argv) {
 
 // ----------------------------- References ----------------------------- //
 // In class examples used as the basis for sections of code
+// Serial calculation to find standard deviation:
+// https://stackoverflow.com/questions/33268513/calculating-standard-deviation-variance-in-c
 // Finding execution time of block of code:
 // https://stackoverflow.com/questions/22387586/measuring-execution-time-of-a-function-in-c
 
