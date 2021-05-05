@@ -96,6 +96,7 @@ int main(int argc, char** argv) {
 
 		// Declare vector store
 		vector<int> temperature = {};
+		vector<int> temperature_int = {};
 
 		// Input stream class for import file
 		ifstream myfile("temp_lincolnshire_short.txt");
@@ -113,13 +114,18 @@ int main(int argc, char** argv) {
 					line_vec.push_back(line);
 				}
 
-				float line_f = stof(line_vec.back()); // Convert string to float
-				temperature.push_back(line_f); // Add final string of each line to back of vector
+				float line_f = stof(line_vec.back()); // Convert string to int
+				int test = line_f * 100;
+				temperature.push_back(test); // Add final string of each line to back of vector
+				//temperature_int.push_back(test);
 			}
 		}
 		else {
 			cout << "Error importing the data!" << endl;
 		}
+
+	
+		
 
 		auto fi_t2 = high_resolution_clock::now();  // Stop execution timer
 
@@ -159,7 +165,7 @@ int main(int argc, char** argv) {
 		float sd = sqrt(var);
 
 		cout << "Serial Outputs:" << endl;
-		cout << "Max = " << max_temp << " Min = " << min_temp << " Mean = " << average << " SD = " << sd << endl;
+		cout << "Max = " << (max_temp/100) << " Min = " << (min_temp/100) << " Mean = " << (average/100) << " SD = " << (sd/100) << endl;
 		cout << " " << endl;
 
 		auto s_t2 = high_resolution_clock::now();  // Stop execution timer
@@ -178,9 +184,13 @@ int main(int argc, char** argv) {
 		cl::Event min_event;
 		cl::Event max_event;
 		cl::Event sum_event;
+		cl::Event var_event;
+		cl::Event var2_event;
 
 		// Memory allocation
 		// Host - input
+		vector<int> temperature_no_pad = temperature;
+
 		size_t local_size = 256;
 		size_t padding_size = temperature.size() % local_size;
 
@@ -196,6 +206,8 @@ int main(int argc, char** argv) {
 		size_t input_size = temperature.size() * sizeof(mytype);  // Size in bytes
 		size_t nr_groups = input_elements / local_size;
 
+		size_t padded_elements = local_size - padding_size;  // Need to ignore padding value when doing calculations such as the mean
+
 		// Host - output
 		size_t output_size = input_size; // Size in bytes
 		//size_t output_size = B.size() * sizeof(mytype);  // Size in bytes
@@ -203,6 +215,8 @@ int main(int argc, char** argv) {
 		vector<mytype> min_output(input_elements);
 		vector<mytype> max_output(input_elements);
 		vector<mytype> sum_output(input_elements);
+		vector<mytype> var_output(input_elements);
+		vector<mytype> var2_output(input_elements);
 
 		// Device - buffers
 		cl::Buffer buffer_A(context, CL_MEM_READ_ONLY, input_size);  // Input buffer
@@ -211,6 +225,8 @@ int main(int argc, char** argv) {
 		cl::Buffer buffer_min(context, CL_MEM_READ_WRITE, output_size);
 		cl::Buffer buffer_max(context, CL_MEM_READ_WRITE, output_size);
 		cl::Buffer buffer_sum(context, CL_MEM_READ_WRITE, output_size);
+		cl::Buffer buffer_var(context, CL_MEM_READ_WRITE, output_size);
+		cl::Buffer buffer_var2(context, CL_MEM_READ_WRITE, output_size);
 
 		// Device operations
 		// Copy array A to and initialise other arrays on device memory
@@ -221,6 +237,8 @@ int main(int argc, char** argv) {
 		queue.enqueueFillBuffer(buffer_min, 0, 0, output_size); 
 		queue.enqueueFillBuffer(buffer_max, 0, 0, output_size);
 		queue.enqueueFillBuffer(buffer_sum, 0, 0, output_size);
+		queue.enqueueFillBuffer(buffer_var, 0, 0, output_size);
+		queue.enqueueFillBuffer(buffer_var2, 0, 0, output_size);
 
 		// ----------------------------- Execute min kernel ----------------------------- //
 
@@ -261,33 +279,80 @@ int main(int argc, char** argv) {
 		//cout << "B = " << B << endl;
 
 
-		// ----------------------------- Post parallel calculations ----------------------------- //
+		// ----------------------------- Post parallel mean calculation ----------------------------- //
 
-		// Mean calculation
-		float f_sum_output = (sum_output[0]);  // To prevent rounding
-		float mean_output = (f_sum_output / input_elements);
+		float f_sum_output = (sum_output[0]/100);  // To prevent rounding
+		float mean_output = (f_sum_output / (input_elements - padded_elements));
+		int int_mean_output = (mean_output * 100);
 
-		// Standard deviation calculation
+
+		// ----------------------------- Execute variance kernel ----------------------------- //
+
+		// Variance calculation needs to be performed after mean is calculated as mean is used in kernel
+		int int_input_size = temperature.size() - padded_elements;  // input_size needs to be an int to be accepted by kernel
+
+		cl::Kernel variance_reduce = cl::Kernel(program, "variance_reduce");
+		variance_reduce.setArg(0, buffer_A);
+		variance_reduce.setArg(1, buffer_var);
+		variance_reduce.setArg(2, cl::Local(local_size * sizeof(mytype)));
+		variance_reduce.setArg(3, int_mean_output);
+		variance_reduce.setArg(4, int_input_size);
+
+		// Call kernel in a sequence
+		queue.enqueueNDRangeKernel(variance_reduce, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size), NULL, &var_event);
+		queue.enqueueReadBuffer(buffer_var, CL_TRUE, 0, output_size, &var_output[0]);  // Copy the result from device to host
+
+				// ----------------------------- Execute sum kernel for variance ----------------------------- //
+
+		cl::Kernel variance_sum_reduce = cl::Kernel(program, "variance_sum_reduce");
+		variance_sum_reduce.setArg(0, buffer_var);
+		variance_sum_reduce.setArg(1, buffer_var2);
+		variance_sum_reduce.setArg(2, cl::Local(local_size * sizeof(mytype)));
+
+		// Call kernel in a sequence
+		queue.enqueueNDRangeKernel(variance_sum_reduce, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size), NULL, &var2_event);
+		queue.enqueueReadBuffer(buffer_var2, CL_TRUE, 0, output_size, &var2_output[0]);  // Copy the result from device to host
+
+
+		// ----------------------------- Post parallel SD calculation ----------------------------- //
+
+ 		float f_var_output = (var2_output[0]);  // To prevent rounding
+		float sd_output = sqrt(f_var_output / ((input_elements - padded_elements) + 1));  // Actual final sd result
+		//float sd_output = sqrt(variance_output);
 
 
 		// ----------------------------- Display results ----------------------------- //
 
 		cout << "Parallel Outputs: " << endl;
-		cout << "Min = " << min_output[0] << endl;
-		cout << "Max = " << max_output[0] << endl;
-		cout << "Mean = " << mean_output << endl;
+		cout << "Min = " << (min_output[0]/100) << endl;
+		cout << "Max = " << (max_output[0]/100) << endl;
+		cout << "Mean = " << (mean_output) << endl;
+		cout << "Standard Deviation = " << sd_output << endl;
 		cout << " " << endl;
 
 
 		// ----------------------------- Display profiling info ----------------------------- //
 
-		// Display the kernel + upload/download execution time
+		// Display the kernel + upload/download execution time for MIN kernel
 		cout << "Kernel execution time for minimum value [ns]: " << min_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - min_event.getProfilingInfo<CL_PROFILING_COMMAND_START>() << endl;
 		cout <<  GetFullProfilingInfo(min_event, ProfilingResolution::PROF_US) << endl;  // Display profiling information
 		cout << " " << endl;
 
+		// Display the kernel + upload/download execution time for MAX kernel
 		cout << "Kernel execution time for maximum value [ns]: " << max_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - max_event.getProfilingInfo<CL_PROFILING_COMMAND_START>() << endl;
 		cout <<  GetFullProfilingInfo(max_event, ProfilingResolution::PROF_US) << endl;
+		cout << " " << endl;
+
+		// Display the kernel + upload/download execution time for SUM (MEAN) kernel
+		cout << "Kernel execution time for mean value [ns]: " << sum_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - sum_event.getProfilingInfo<CL_PROFILING_COMMAND_START>() << endl;
+		cout << GetFullProfilingInfo(sum_event, ProfilingResolution::PROF_US) << endl;
+		cout << " " << endl;
+
+		// Display the kernel + upload/download execution time for VAR + SUM_VAR (SD) kernel
+		cout << "Kernel execution time for standard deviation value [ns]: " << (var_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - var_event.getProfilingInfo<CL_PROFILING_COMMAND_START>()
+			+ var2_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - var2_event.getProfilingInfo<CL_PROFILING_COMMAND_START>()) << endl;
+		cout << GetFullProfilingInfo(var_event, ProfilingResolution::PROF_US) << endl;
+		cout << GetFullProfilingInfo(var2_event, ProfilingResolution::PROF_US) << endl;
 		cout << " " << endl;
 
 	}
