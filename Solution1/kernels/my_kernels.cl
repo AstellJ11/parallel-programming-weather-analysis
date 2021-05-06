@@ -11,6 +11,7 @@ kernel void min_reduce(global const int* A, global int* B, local int *scratch) {
     // Wait for all local threads to finish copying from global to local memory
     barrier(CLK_LOCAL_MEM_FENCE);
 
+    // Loop through vector to find smallest value
     for (int i = 1; i < N; i *= 2)
     {
         if ((lid % (i * 2) == 0) && ((lid + i) < N))
@@ -42,6 +43,7 @@ kernel void max_reduce(global const int* A, global int* B, local int *scratch) {
     // Wait for all local threads to finish copying from global to local memory
     barrier(CLK_LOCAL_MEM_FENCE);
 
+    // Loop through vector to find highest value
     for (int i = 1; i < N; i *= 2)
     {
         if ((lid % (i * 2) == 0) && ((lid + i) < N))
@@ -73,6 +75,7 @@ kernel void sum_reduce(global const int* A, global int* B, local int *scratch) {
     // Wait for all local threads to finish copying from global to local memory
     barrier(CLK_LOCAL_MEM_FENCE);
 
+    // Loop to find total value
     for (int i = 1; i < N; i *= 2)
     {
         if ((lid % (i * 2) == 0) && ((lid + i) < N))
@@ -114,6 +117,7 @@ kernel void variance_reduce(global const int* A, global int* B, local int *scrat
 }
 
 
+// Kernel to sum the calculated variance values
 kernel void variance_sum_reduce(global const int* A, global int* B, local int *scratch) {
     int id = get_global_id(0);
 	int lid = get_local_id(0);
@@ -138,11 +142,33 @@ kernel void variance_sum_reduce(global const int* A, global int* B, local int *s
         barrier(CLK_LOCAL_MEM_FENCE);
     }
     
-    // Need to divide the result by 100 as x100 by 100 before parsing to kernel, but as formula is squared, 100^2 = 10000
+    // Need to divide the result by 100 as x100 before parsing to kernel, but as formula is squared, 100^2 = 10000
 	scratch[lid] = scratch[lid] / 10000;
 
 	if (!lid) 
 	{
 		atomic_add(B, scratch[lid]);
 	}
+}
+
+
+// Sorts the input vector from smallest to largest
+kernel void sort_reduce(global const int * in, global int * out, int input_size) {
+    int id = get_global_id(0);
+    int GN = get_global_size(0);
+
+    int iData = in[id];
+    int pos = 0;
+
+    if (id < input_size) {  // Needed to ignore padding values
+        for (int j = 0; j < GN; j++)
+        {
+        int jKey = in[j]; // broadcasted
+        bool smaller = (jKey < iData) || (jKey == iData && j < id);  // in[j] < in[i] ?
+        pos += (smaller)?1:0;
+
+        }
+    out[pos] = iData;
+
+    }
 }
