@@ -3,7 +3,7 @@
 
 ## Requirements
 
-The presented code was developed and tested on Windows 10, Visual Studio 2019, Intel Quad Core CPU, GTX 970 and is based on the 'tutorial 3' solution from the in class workshop tutorials
+The presented code was developed and tested on Windows 10, Visual Studio 2019, Intel Quad Core CPU, GTX 970 and is based on the Tutorial 3 solution from the in class workshop tutorials
 
  
 ## Windows Setup
@@ -14,7 +14,7 @@ The presented code was developed and tested on Windows 10, Visual Studio 2019, I
 
 ## Code Execution: 
 
-Download the provoided .zip file to a suitable location for execution. Extract the folder and open the 'Solution1.sln' file with VS2019. Once open, select 'main.cpp' and either use the local windows debugger, or build the project (Ctrl+B) and execute in a seperate command line window, such as: `C:\filepath\CMP3752M_Assessment_01\x64\Debug\Solution1` then execute `Solution1.exe`
+Download the provoided .zip file to a suitable location for execution. Extract the folder and open the `Solution1.sln` file with VS2019. Once open, select `main.cpp` and either use the local windows debugger, or build the project (Ctrl+B) and execute in a seperate command line window, such as: `C:\filepath\CMP3752M_Assessment_01\x64\Debug\Solution1` then execute `Solution1.exe`
 
 
 ## Dataset Information
@@ -32,6 +32,6 @@ Each column corresponds to the following category:
 
 ### Reference
 
-https://github.com/alanmillard/OpenCL-Tutorials/blob/master/README.md
+https://github.com/alanmillard/OpenCL-Tutorials
 
 
