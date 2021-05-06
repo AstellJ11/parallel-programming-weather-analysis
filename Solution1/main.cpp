@@ -11,10 +11,10 @@
 // Written by James Astell (17668733)
 
 // ----------------------------- Summary of Implementation ----------------------------- //
-//
-//	To do
-//
-//
+// When the code is executed, various parts of the code are initialised, such as gathering the computing device and enabling profiling for the queue. Afterward, the dataset is imported using the input stream class. The extracted temperature values are then first converted from string to float to maintain accuracy, however, are then multiplied by 100 and stored as int. This is done to maintain accuracy to 2dp while still allowing the kernels to operate on integers.
+// Next, the serial part of the code is ran, to get a baseline comparison for the other algorithms.Subsequently, events are initialised to track timings.The padding for the input data is created with the value of 0. Various other vector sizes and pre - required values are defined here, as well as the buffers created.The min, max, and sum kernels are then calledand copied into memory.Simple serial calculations are performed on the sum to find the mean, which can be done here as it doesn’t affect execution time.This is then repeated after the mean has been found for the variance.The variance kernel includes the ‘input_size’ integer, which is used to ignore the additional padded values created.Finally, the outputted values are displayed to the user alongside the memory transfer + execution times.
+// While sorting of the dataset and the following statistical values weren’t included in the final submission, it was attempted, but difficulties were faced when dealing with the padded values.
+// While the structure of the host code was heavily inspired by the workshop tutorials, all events, timings, and executions were adapted for the assignment.The kernels take the key ideas behind the tutorialsand combine them to optimise the performance for each task.The sources for certain parts of code can be seen below.
 
 // ----------------------------- References ----------------------------- //
 // In class examples used as the basis for sections of code + kernels
