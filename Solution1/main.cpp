@@ -86,22 +86,6 @@ int main(int argc, char** argv) {
 			throw err;
 		}
 
-		// REMOVE BEFORE SUBMIT
-		// REMOVE BEFORE SUBMIT
-		// REMOVE BEFORE SUBMIT
-		// REMOVE BEFORE SUBMIT
-		// REMOVE BEFORE SUBMIT
-		// Display device properties
-		cl::Device device = context.getInfo<CL_CONTEXT_DEVICES>()[0]; // Get device
-		cout << endl;
-		cout << "Global Memory Size: " << device.getInfo <CL_DEVICE_GLOBAL_MEM_SIZE>() << endl;
-		cout << "Local Memory Size: " << device.getInfo <CL_DEVICE_LOCAL_MEM_SIZE>() << endl;
-		cout << endl;
-		cout << "Max Work Group Size: " << device.getInfo<CL_DEVICE_MAX_WORK_GROUP_SIZE>() << endl;
-		cout << "Max Device Dimensions: " << device.getInfo<CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS>() << endl;
-		cout << "Max Work Items Per Workgroup: " << device.getInfo<CL_DEVICE_MAX_WORK_ITEM_SIZES>() << endl;
-		cout << endl;
-
 		typedef int mytype;  // Create additional name for datatype int
 
 
@@ -113,8 +97,11 @@ int main(int argc, char** argv) {
 		vector<int> temperature = {};
 		vector<int> temperature_int = {};
 
+		cout << "Reading in file data, please wait... (usually take 70-80 seconds)" << endl;
+		cout << endl;
+
 		// Input stream class for import file
-		ifstream myfile("temp_lincolnshire_short.txt");
+		ifstream myfile("temp_lincolnshire.txt");
 		string line;
 
 		if (myfile.is_open()) {
@@ -134,6 +121,7 @@ int main(int argc, char** argv) {
 				temperature.push_back(test); // Add final string of each line to back of vector
 
 			}
+			cout << "Successfully imported the data!" << endl;
 		}
 		else {
 			cout << "Error importing the data!" << endl;
@@ -177,7 +165,7 @@ int main(int argc, char** argv) {
 		float sd = sqrt(var);
 
 		// Display outputs
-		cout << "Serial Outputs:" << endl;
+		cout << "----------------- Serial Code Outputs -----------------" << endl;
 		cout << "Max = " << (max_temp/100) << " Min = " << (min_temp/100) << " Mean = " << (average/100) << " SD = " << (sd/100) << endl;
 		cout << endl;
 
@@ -187,6 +175,7 @@ int main(int argc, char** argv) {
 		auto s_ms_int = duration_cast<nanoseconds>(s_t2 - s_t1);  // INT
 		duration<double, nano> s_ms_double = s_t2 - s_t1;  // DOUBLE
 		cout << "Serial code execution time [ns / s]: " << s_ms_int.count() << " / " << (s_ms_double.count() / 1000000000) << endl;
+		cout << "-------------------------------------------------------" << endl;
 		cout << endl;
 
 
@@ -242,7 +231,6 @@ int main(int argc, char** argv) {
 		vector<mytype> sum_output(input_elements);
 		vector<mytype> var_output(input_elements);
 		vector<mytype> var_sum_output(input_elements);
-		vector<mytype> sort_output(input_elements);
 
 		// Device - buffers
 		cl::Buffer buffer_A(context, CL_MEM_READ_ONLY, input_size);  // Input buffer
@@ -253,7 +241,6 @@ int main(int argc, char** argv) {
 		cl::Buffer buffer_sum(context, CL_MEM_READ_WRITE, output_size);
 		cl::Buffer buffer_var(context, CL_MEM_READ_WRITE, output_size);
 		cl::Buffer buffer_var_sum(context, CL_MEM_READ_WRITE, output_size);
-		cl::Buffer buffer_sort(context, CL_MEM_READ_WRITE, output_size);
 
 		// Device operations
 		// Copy array A to and initialise other arrays on device memory
@@ -266,7 +253,6 @@ int main(int argc, char** argv) {
 		queue.enqueueFillBuffer(buffer_sum, 0, 0, output_size);
 		queue.enqueueFillBuffer(buffer_var, 0, 0, output_size);
 		queue.enqueueFillBuffer(buffer_var_sum, 0, 0, output_size);
-		queue.enqueueFillBuffer(buffer_sort, 0, 0, output_size);
 
 		// ----------------------------- Execute min kernel ----------------------------- //
 
@@ -346,40 +332,12 @@ int main(int argc, char** argv) {
 		float sd_output = sqrt(f_var_output / ((input_elements - padded_elements) - 1));  // Actual final sd result
 
 
-		// ----------------------------- Execute sort kernel ----------------------------- //
-
-		cl::Kernel sort_reduce = cl::Kernel(program, "sort_reduce");
-		sort_reduce.setArg(0, buffer_A);
-		sort_reduce.setArg(1, buffer_sort);
-		sort_reduce.setArg(2, int_input_size);
-
-		// Call kernel in a sequence
-		queue.enqueueNDRangeKernel(sort_reduce, cl::NullRange, cl::NDRange(input_elements), cl::NDRange(local_size), NULL, &sort_event);
-		queue.enqueueReadBuffer(buffer_sort, CL_TRUE, 0, output_size, &sort_output[0], NULL, &down_sort_event);  // Copy the result from device to host
-
-
-		// ----------------------------- Post parallel sort calculations ----------------------------- //
-
-
-
-
-		// ----------------------------- Display results ----------------------------- //
-
-		cout << "Parallel Outputs: " << endl;
-
-		cout << "25th percentile = " << (sort_output[0]) << endl;
-		cout << "Median = " << (mean_output) << endl;
-		cout << "75th percentile = " << (mean_output) << endl;
-		cout << endl;
-
-
 		// ----------------------------- Display memory transfer (upload time) ----------------------------- //
 
 		// Overall operation time = sum of memory transfers + kernel execution
 
 		// Display upload time for initial temp vector
 		cout << "Upload time for inital temp vector [ns]: " << up_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - up_event.getProfilingInfo<CL_PROFILING_COMMAND_START>() << endl;
-		cout << GetFullProfilingInfo(up_event, ProfilingResolution::PROF_US) << endl;  // Display profiling information
 		cout << endl;
 
 
@@ -448,8 +406,10 @@ int main(int argc, char** argv) {
 		// Overall operation time = sum of memory transfers + kernel execution
 		int operation_time = (up_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - up_event.getProfilingInfo<CL_PROFILING_COMMAND_START>()) + (min_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - min_event.getProfilingInfo<CL_PROFILING_COMMAND_START>()) + (down_min_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - down_min_event.getProfilingInfo<CL_PROFILING_COMMAND_START>()) + (max_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - max_event.getProfilingInfo<CL_PROFILING_COMMAND_START>()) + (down_max_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - down_max_event.getProfilingInfo<CL_PROFILING_COMMAND_START>()) + (sum_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - sum_event.getProfilingInfo<CL_PROFILING_COMMAND_START>()) + (down_sum_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - down_sum_event.getProfilingInfo<CL_PROFILING_COMMAND_START>()) + (var_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - var_event.getProfilingInfo<CL_PROFILING_COMMAND_START>()) + (var_sum_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - var_sum_event.getProfilingInfo<CL_PROFILING_COMMAND_START>()) + (down_var_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - down_var_event.getProfilingInfo<CL_PROFILING_COMMAND_START>()) + (down_var_sum_event.getProfilingInfo<CL_PROFILING_COMMAND_END>() - down_var_sum_event.getProfilingInfo<CL_PROFILING_COMMAND_START>());
 
+		float f_operation_time = operation_time;
+
 		cout << "------------------ Execution Times --------------------" << endl;
-		cout << "Total memory transfer + kernel execution time [ns / s]: " << operation_time << " / " << (operation_time / 1000000000) << endl;
+		cout << "Total memory transfer + kernel execution time [ns / s]: " << operation_time << " / " << (f_operation_time / 1000000000) << endl;
 		cout << endl;
 
 		// Calculate + display execution time

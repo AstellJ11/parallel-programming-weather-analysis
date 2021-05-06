@@ -150,25 +150,3 @@ kernel void variance_sum_reduce(global const int* A, global int* B, local int *s
 		atomic_add(B, scratch[lid]);
 	}
 }
-
-
-// Sorts the input vector from smallest to largest
-kernel void sort_reduce(global const int * in, global int * out, int input_size) {
-    int id = get_global_id(0);
-    int GN = get_global_size(0);
-
-    int iData = in[id];
-    int pos = 0;
-
-    if (id < input_size) {  // Needed to ignore padding values
-        for (int j = 0; j < GN; j++)
-        {
-        int jKey = in[j]; // broadcasted
-        bool smaller = (jKey < iData) || (jKey == iData && j < id);  // in[j] < in[i] ?
-        pos += (smaller)?1:0;
-
-        }
-    out[pos] = iData;
-
-    }
-}
